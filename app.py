@@ -14,7 +14,8 @@ app = Flask(__name__)
 
 load_dotenv()
 
-app.config['SQLALCHEMY_DATABASE_URI'] = (
+app.config['SQLALCHEMY_DATABASE_URI'] = os.getenv(
+    'DATABASE_URL',
     f"postgresql://postgres:{os.getenv('PSQL_PASSWORD')}@localhost/postgres"
 )
 app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
@@ -200,7 +201,6 @@ def chat(conversation_id):
 
     db.session.add(assistant_msg)
     db.session.commit()
-
 
     return jsonify({
         'user_message': user_message,
