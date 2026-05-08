@@ -1,9 +1,13 @@
 from platform import android_ver
 
 from flask import Flask, request, jsonify
-from models import db, User, Order, Conversation, Message
+from flask_jwt_extended import JWTManager, create_access_token, jwt_required, get_jwt_identity
+from sqlalchemy.sql.functions import current_user
+
+from models import db, User, Conversation, Message
 from dotenv import load_dotenv
 import anthropic
+import bcrypt
 import os
 
 app = Flask(__name__)
@@ -15,10 +19,57 @@ app.config['SQLALCHEMY_DATABASE_URI'] = (
 )
 app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
 
+
+app.config['JWT_SECRET_KEY'] = os.getenv('JWT_SECRET_KEY')
+jwt = JWTManager(app)
+
 db.init_app(app)
 
 with app.app_context():
     db.create_all()
+
+@app.route('/auth/register', methods=['POST'])
+def register_user():
+    data = request.get_json()
+    name = data.get('name')
+    email = data.get('email')
+    password = data.get('password')
+
+    if not name or not email or not password:
+        return jsonify({'error': 'Name, email and password are required'}), 400
+
+    if User.query.filter_by(email=email).first():
+        return jsonify({'error': 'Email already registered'}), 409
+
+    password_hash = bcrypt.hashpw(password.encode('utf-8'), bcrypt.gensalt()).decode('utf-8')
+
+    user = User(name=name, email=email, password_hash=password_hash)
+
+    db.session.add(user)
+    db.session.commit()
+
+    token = create_access_token(identity=str(user.id))
+    return jsonify({'token': token, 'user': user.to_dict()}), 201
+
+@app.route('/auth/login', methods=['POST'])
+def login_user():
+    data = request.get_json()
+    email = data.get('email')
+    password = data.get('password')
+
+    if not email or not password:
+        return jsonify({'error':'PLease fill an email and a password'}), 400
+
+    user = User.query.filter_by(email=email).first()
+    if not user:
+        return jsonify({'error': 'Invalid email or password'}), 401
+
+    if not bcrypt.checkpw(password.encode('utf-8'), user.password_hash.encode('utf-8')):
+        return jsonify({'error':'This email or password does not exist'}), 401
+
+    token = create_access_token(identity=str(user.id))
+    return jsonify({'token': token, 'user': user.to_dict()}), 200
+
 
 @app.route('/users', methods=['GET'])
 def get_all_users():
@@ -74,10 +125,6 @@ def delete_user(user_id):
     db.session.commit()
     return jsonify({'message': 'user has been successfully deleted'})
 
-@app.route('/orders', methods=['GET'])
-def get_orders():
-    orders = Order.query.all()
-    return jsonify([o.to_dict() for o in orders])
 
 @app.route('/users/search', methods=['GET'])
 def search_users():
@@ -108,7 +155,9 @@ def create_conversation():
     return jsonify(conversation.to_dict()), 201
 
 @app.route('/conversations/<int:conversation_id>/chat', methods=['POST'])
+@jwt_required()
 def chat(conversation_id):
+    current_user_id = int(get_jwt_identity())
     conversation = Conversation.query.get(conversation_id)
     if conversation is None:
         return jsonify({'error': 'This conversation does not exist'}), 404
@@ -125,7 +174,6 @@ def chat(conversation_id):
     )
     db.session.add(user_msg)
     db.session.flush()
-
 
     history = Message.query.filter_by(
         conversation_id=conversation_id

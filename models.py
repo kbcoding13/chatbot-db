@@ -2,6 +2,7 @@ from datetime import datetime, timezone
 from email.policy import default
 
 from flask_sqlalchemy import SQLAlchemy
+from sqlalchemy.orm import backref
 
 db = SQLAlchemy()
 
@@ -11,7 +12,8 @@ class User(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     name = db.Column(db.String, nullable=False)
     email = db.Column(db.String, nullable=False, unique=True)
-    orders = db.relationship('Order', backref='user', lazy=True)
+    password_hash = db.Column(db.String, nullable=False)
+    conversations = db.relationship('Conversation', backref='user', lazy=True)
 
     def to_dict(self):
         return {
@@ -55,18 +57,3 @@ class Message(db.Model):
 
         }
 
-class Order(db.Model):
-    __tablename__ = 'orders'
-
-    id = db.Column(db.Integer, primary_key=True)
-    user_id = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=False)
-    product = db.Column(db.String, nullable=False)
-    amount = db.Column(db.Numeric(10,2), nullable=False)
-
-    def to_dict(self):
-        return {
-            'id': self.id,
-            'user_id': self.user_id,
-            'product': self.product,
-            'amount': float(self.amount)
-        }
