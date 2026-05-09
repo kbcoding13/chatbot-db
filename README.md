@@ -53,3 +53,6 @@ python app.py
 | POST | /users | Create a user |
 | POST | /conversations | Start a conversation |
 | POST | /conversations/:id/chat | Send a message |
+
+## Live API
+https://your-url.up.railway.app
